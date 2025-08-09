@@ -7,7 +7,7 @@ import 'package:uptodo/data/task_dao.dart';
 import 'package:uptodo/ui/settings/settings_screen.dart';
 import 'package:uptodo/data/settings_service.dart'; // settingsController
 import 'package:uptodo/ui/theme/app_theme.dart';
-
+import 'package:uptodo/ui/calendar/calendar_screen.dart'; // màn Lịch
 import '../../data/settings_controller.dart'; // gradient theo theme
 
 enum SortMode { priority, newest }
@@ -27,9 +27,12 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Task> _tasks = [];
   bool _loading = true;
 
-  // Filter UI (mặc định lấy từ settings một lần)
+  // Filter UI
   SortMode _sortMode = SortMode.newest;
   ViewMode _viewMode = ViewMode.both;
+
+  // ---- KEY cho Calendar
+  final _calendarKey = GlobalKey<CalendarScreenState>();
 
   @override
   void initState() {
@@ -57,36 +60,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Lắng nghe thay đổi settings để cập nhật theme/nền + các flag hiển thị
     return AnimatedBuilder(
       animation: settingsController,
       builder: (_, __) {
-        final theme = Theme.of(context);
-        final cs = theme.colorScheme;
+        final cs = Theme.of(context).colorScheme;
         final accent = cs.primary;
-        final use24h = settingsController.state.use24hTime;
-        final showCompletedSetting = settingsController.state.showCompleted;
 
         return Scaffold(
           drawer: _buildDrawer(),
-          body: Container(
-            decoration: BoxDecoration(gradient: AppTheme.bgGradient(context)),
-            child: Column(
-              children: [
-                _buildHeader(accent),
-                _buildControlsRow(),
-                Expanded(
-                  child: _loading
-                      ? const Center(child: CircularProgressIndicator())
-                      : _tasks.isEmpty
-                      ? _buildEmptyState(accent)
-                      : RefreshIndicator(
-                    onRefresh: _loadTasks,
-                    child: _buildTaskList(use24h, showCompletedSetting),
-                  ),
-                ),
-              ],
-            ),
+          // BODY dùng IndexedStack để không push khi đổi tab
+          body: IndexedStack(
+            index: _selectedIndex,
+            children: [
+              _homeTab(),
+              CalendarScreen(key: _calendarKey), // <-- gắn key
+              const SizedBox.shrink(),            // slot cho nút +
+              const _PlaceholderTab('Tập Trung'),
+              const _PlaceholderTab('Hồ Sơ'),
+            ],
           ),
           bottomNavigationBar: _buildBottomNavigationBar(accent),
           floatingActionButton: FloatingActionButton(
@@ -97,6 +88,35 @@ class _HomeScreenState extends State<HomeScreen> {
           floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
         );
       },
+    );
+  }
+
+  // ================== HOME TAB ==================
+  Widget _homeTab() {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final accent = cs.primary;
+    final use24h = settingsController.state.use24hTime;
+    final showCompletedSetting = settingsController.state.showCompleted;
+
+    return Container(
+      decoration: BoxDecoration(gradient: AppTheme.bgGradient(context)),
+      child: Column(
+        children: [
+          _buildHeader(accent),
+          _buildControlsRow(),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _tasks.isEmpty
+                ? _buildEmptyState(accent)
+                : RefreshIndicator(
+              onRefresh: _loadTasks,
+              child: _buildTaskList(use24h, showCompletedSetting),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -142,10 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
       width: width,
       backgroundColor: Colors.transparent,
       child: ClipRRect(
-        borderRadius: const BorderRadius.only(
-          topRight: Radius.circular(24),
-          bottomRight: Radius.circular(24),
-        ),
+        borderRadius: const BorderRadius.only(topRight: Radius.circular(24), bottomRight: Radius.circular(24)),
         child: Container(
           decoration: BoxDecoration(
             color: cs.surface,
@@ -176,6 +193,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 _drawerItem(
                   cs: cs,
+                  icon: Icons.event_note_outlined,
+                  text: 'Lịch',
+                  onTap: () {
+                    Navigator.pop(context);
+                    setState(() => _selectedIndex = 1);
+                    _calendarKey.currentState?.reload(); // <-- vào Lịch thì reload
+                  },
+                ),
+                _drawerItem(
+                  cs: cs,
                   icon: Icons.close,
                   text: 'Đóng',
                   onTap: () => Navigator.pop(context),
@@ -195,11 +222,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [accent.withOpacity(.16), accent.withOpacity(.04)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        gradient: LinearGradient(colors: [accent.withOpacity(.16), accent.withOpacity(.04)], begin: Alignment.topLeft, end: Alignment.bottomRight),
         border: Border(bottom: BorderSide(color: cs.outlineVariant)),
       ),
       child: Row(
@@ -215,10 +238,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-          IconButton(
-            icon: Icon(Icons.close_rounded, color: cs.onSurfaceVariant),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
+          IconButton(icon: Icon(Icons.close_rounded, color: cs.onSurfaceVariant), onPressed: () => Navigator.of(context).pop()),
         ],
       ),
     );
@@ -232,12 +252,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }) {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(color: cs.surfaceVariant, borderRadius: BorderRadius.circular(12)),
-        child: Icon(icon, color: cs.onSurface),
-      ),
+      leading: Container(width: 40, height: 40, decoration: BoxDecoration(color: cs.surfaceVariant, borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: cs.onSurface)),
       title: Text(text, style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700)),
       trailing: Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
       onTap: onTap,
@@ -306,11 +321,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _dropdownShell(Widget child) {
     final cs = Theme.of(context).colorScheme;
     return DecoratedBox(
-      decoration: BoxDecoration(
-        color: cs.surfaceVariant.withOpacity(.6),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: cs.outlineVariant),
-      ),
+      decoration: BoxDecoration(color: cs.surfaceVariant.withOpacity(.6), borderRadius: BorderRadius.circular(12), border: Border.all(color: cs.outlineVariant)),
       child: Padding(padding: const EdgeInsets.symmetric(horizontal: 10), child: child),
     );
   }
@@ -323,23 +334,11 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            width: 200,
-            decoration: BoxDecoration(color: accent.withOpacity(0.1), borderRadius: BorderRadius.circular(100)),
-            child: Icon(Icons.task_alt, size: 100, color: accent),
-          ),
+          Container(width: 200, decoration: BoxDecoration(color: accent.withOpacity(0.1), borderRadius: BorderRadius.circular(100)), child: Icon(Icons.task_alt, size: 100, color: accent)),
           const SizedBox(height: 40),
-          Text(
-            'Bạn muốn làm gì hôm nay?',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.headlineSmall?.copyWith(color: cs.onBackground, fontWeight: FontWeight.bold),
-          ),
+          Text('Bạn muốn làm gì hôm nay?', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(color: cs.onBackground, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-          Text(
-            'Nhấn + để thêm công việc',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
-          ),
+          Text('Nhấn + để thêm công việc', textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
         ],
       ),
     );
@@ -380,16 +379,11 @@ class _HomeScreenState extends State<HomeScreen> {
     if (children.isEmpty) {
       children = [
         const SizedBox(height: 24),
-        Center(
-          child: Text('Không có công việc', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-        ),
+        Center(child: Text('Không có công việc', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))),
       ];
     }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: ListView(children: [...children, const SizedBox(height: 80)]),
-    );
+    return Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: ListView(children: [...children, const SizedBox(height: 80)]));
   }
 
   Widget _sectionHeader(String title) {
@@ -421,7 +415,7 @@ class _HomeScreenState extends State<HomeScreen> {
       secondaryBackground: _swipeBg(alignLeft: false),
       confirmDismiss: (_) async => await _confirmDelete(idx),
       child: InkWell(
-        onTap: () => _viewTask(idx), // chạm card -> xem chi tiết
+        onTap: () => _viewTask(idx),
         onLongPress: () => _showTaskMenu(idx),
         borderRadius: BorderRadius.circular(12),
         child: Container(
@@ -443,6 +437,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   final newVal = !t.isCompleted;
                   if (t.id != null) await _taskDao.toggleCompleted(t.id!, newVal);
                   setState(() => _tasks[idx] = t.copyWith(isCompleted: newVal));
+                  _calendarKey.currentState?.reload(date: t.date); // cập nhật Lịch
                 },
                 child: Container(
                   width: 24,
@@ -462,7 +457,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // title + priority pill
                     Row(
                       children: [
                         Expanded(
@@ -479,20 +473,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                     const SizedBox(height: 6),
-
-                    // description
-                    Text(
-                      (task.description).trim().isEmpty ? 'Không có mô tả' : task.description,
-                      style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    Text((task.description).trim().isEmpty ? 'Không có mô tả' : task.description, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant), maxLines: 2, overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 10),
-
-                    // chips
                     Row(
                       children: [
-                        _categoryChipReadonly(task.category), // chỉ xem, không sửa tại đây
+                        _categoryChipReadonly(task.category),
                         const SizedBox(width: 8),
                         _dateChip(task.date),
                         const SizedBox(width: 8),
@@ -509,7 +494,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ====== Xem chi tiết (bottom sheet) ======
+  // ====== Xem chi tiết ======
   Future<void> _viewTask(int index) async {
     final cs = Theme.of(context).colorScheme;
     final use24h = settingsController.state.use24hTime;
@@ -532,37 +517,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          t.title,
-                          style: Theme.of(ctx).textTheme.titleLarge?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w800),
-                        ),
+                        child: Text(t.title, style: Theme.of(ctx).textTheme.titleLarge?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w800)),
                       ),
-                      Icon(
-                        t.isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
-                        color: t.isCompleted ? cs.primary : cs.onSurfaceVariant,
-                      ),
+                      Icon(t.isCompleted ? Icons.check_circle : Icons.radio_button_unchecked, color: t.isCompleted ? cs.primary : cs.onSurfaceVariant),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  if (t.description.trim().isNotEmpty)
-                    Text(t.description, style: TextStyle(color: cs.onSurfaceVariant)),
+                  if (t.description.trim().isNotEmpty) Text(t.description, style: TextStyle(color: cs.onSurfaceVariant)),
                   if (t.description.trim().isNotEmpty) const SizedBox(height: 12),
-
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _categoryChipReadonly(t.category),
-                      _dateChip(t.date),
-                      _timeChip(t.time, use24h),
-                      _priorityPill(t.priority),
-                    ],
-                  ),
-
+                  Wrap(spacing: 8, runSpacing: 8, children: [_categoryChipReadonly(t.category), _dateChip(t.date), _timeChip(t.time, use24h), _priorityPill(t.priority)]),
                   const SizedBox(height: 16),
                   const Divider(),
                   const SizedBox(height: 8),
-
                   Row(
                     children: [
                       Expanded(
@@ -571,7 +537,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           label: const Text('Sửa'),
                           onPressed: () async {
                             Navigator.of(ctx).pop();
-                            await _editTask(index); // chỉ sửa khi bấm nút này
+                            await _editTask(index);
                           },
                         ),
                       ),
@@ -595,7 +561,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // chips
+  // chips + helpers
   String _formatTime(String time, bool use24h) {
     try {
       final parts = time.split(':');
@@ -612,19 +578,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final text = _formatTime(time, use24h);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: cs.surfaceVariant,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: cs.outlineVariant),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.access_time, size: 14, color: cs.onSurfaceVariant),
-          const SizedBox(width: 4),
-          Text(text, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w500)),
-        ],
-      ),
+      decoration: BoxDecoration(color: cs.surfaceVariant, borderRadius: BorderRadius.circular(12), border: Border.all(color: cs.outlineVariant)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.access_time, size: 14, color: cs.onSurfaceVariant),
+        const SizedBox(width: 4),
+        Text(text, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w500)),
+      ]),
     );
   }
 
@@ -654,19 +613,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final label = '${_weekdayVN(d.weekday)} ${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: cs.surfaceVariant,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: cs.outlineVariant),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.event, size: 14, color: cs.onSurfaceVariant),
-          const SizedBox(width: 4),
-          Text(label, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w500)),
-        ],
-      ),
+      decoration: BoxDecoration(color: cs.surfaceVariant, borderRadius: BorderRadius.circular(12), border: Border.all(color: cs.outlineVariant)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.event, size: 14, color: cs.onSurfaceVariant),
+        const SizedBox(width: 4),
+        Text(label, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w500)),
+      ]),
     );
   }
 
@@ -680,28 +632,19 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // chip danh mục chỉ hiển thị (không onTap)
   Widget _categoryChipReadonly(String name) {
     final color = _getCategoryColor(name);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(.20),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(.9)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.label, size: 14, color: color),
-          const SizedBox(width: 4),
-          Text(name, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
-        ],
-      ),
+      decoration: BoxDecoration(color: color.withOpacity(.20), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(.9))),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.label, size: 14, color: color),
+        const SizedBox(width: 4),
+        Text(name, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
+      ]),
     );
   }
 
-  // (giữ chip có thể sửa nếu cần dùng ở nơi khác)
   Widget _categoryChip(String name, {VoidCallback? onTap}) {
     final color = _getCategoryColor(name);
     return InkWell(
@@ -709,21 +652,14 @@ class _HomeScreenState extends State<HomeScreen> {
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: color.withOpacity(.20),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(.9)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.label, size: 14, color: color),
-            const SizedBox(width: 4),
-            Text(name, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
-            const SizedBox(width: 4),
-            Icon(Icons.edit, size: 12, color: color),
-          ],
-        ),
+        decoration: BoxDecoration(color: color.withOpacity(.20), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(.9))),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.label, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(name, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
+          const SizedBox(width: 4),
+          Icon(Icons.edit, size: 12, color: color),
+        ]),
       ),
     );
   }
@@ -744,12 +680,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final task = await showModalBottomSheet<Task>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: Colors.transparent,
       builder: (_) => const AddTaskDialog(),
     );
     if (task != null) {
       final id = await _taskDao.insert(task);
       setState(() => _tasks.insert(0, task.copyWith(id: id)));
+      _calendarKey.currentState?.reload(date: task.date); // <-- update lịch
     }
   }
 
@@ -757,13 +694,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final updated = await showModalBottomSheet<Task>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: Colors.transparent,
       builder: (_) => EditTaskDialog(initial: _tasks[index]),
     );
     if (updated != null) {
       final withId = updated.copyWith(id: _tasks[index].id);
       await _taskDao.update(withId);
       setState(() => _tasks[index] = withId);
+      _calendarKey.currentState?.reload(date: withId.date); // <-- update lịch
     }
   }
 
@@ -782,6 +720,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final t = _tasks[index].copyWith(category: name);
       if (t.id != null) await _taskDao.update(t);
       setState(() => _tasks[index] = t);
+      _calendarKey.currentState?.reload(date: t.date);
     }
   }
 
@@ -801,8 +740,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (ok == true) {
       final id = _tasks[index].id;
+      final date = _tasks[index].date;
       if (id != null) await _taskDao.delete(id);
       setState(() => _tasks.removeAt(index));
+      _calendarKey.currentState?.reload(date: date);
     }
     return ok ?? false;
   }
@@ -884,7 +825,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case 'cá nhân':
         return Colors.green;
       case 'mới':
-        return cs.primary; // dùng màu nhấn hiện tại
+        return cs.primary;
       default:
         return _colorFromName(category);
     }
@@ -911,13 +852,17 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildBottomNavigationBar(Color accent) {
     final cs = Theme.of(context).colorScheme;
     return Container(
-      decoration: BoxDecoration(
-        color: cs.surface,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, -2))],
-      ),
+      decoration: BoxDecoration(color: cs.surface, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, -2))]),
       child: BottomNavigationBar(
         currentIndex: _selectedIndex,
-        onTap: (i) => setState(() => _selectedIndex = i),
+        onTap: (i) {
+          if (i == 2) {
+            _showAddTaskDialog();
+            return;
+          }
+          setState(() => _selectedIndex = i);
+          if (i == 1) _calendarKey.currentState?.reload(); // sang lịch thì refresh
+        },
         type: BottomNavigationBarType.fixed,
         backgroundColor: Colors.transparent,
         selectedItemColor: accent,
@@ -931,5 +876,16 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }
+}
+
+// Tab placeholder
+class _PlaceholderTab extends StatelessWidget {
+  final String label;
+  const _PlaceholderTab(this.label);
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Scaffold(backgroundColor: cs.surface, body: Center(child: Text(label, style: TextStyle(color: cs.onSurface))));
   }
 }

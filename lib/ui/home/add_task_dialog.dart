@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:uptodo/models/task.dart';
-import '../category/category_screen.dart';
+import 'package:uptodo/ui/category/category_screen.dart';
+import 'package:uptodo/data/settings_service.dart';
+
+import '../../data/settings_controller.dart'; // settingsController để đọc 24h
 
 class AddTaskDialog extends StatefulWidget {
   const AddTaskDialog({super.key});
-
   @override
   State<AddTaskDialog> createState() => _AddTaskDialogState();
 }
@@ -14,29 +16,10 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
   final _titleCtrl = TextEditingController();
   final _descCtrl  = TextEditingController();
 
-  String _selectedCategory = 'Mới';
-  TaskPriority _selectedPriority = TaskPriority.medium;
-
-  // NEW: mức ưu tiên dạng số để hiển thị P1..P10
-  int _priorityLevel = 5;
-
-  DateTime _selectedDate = DateTime.now();
-  TimeOfDay _selectedTime = const TimeOfDay(hour: 15, minute: 45);
-
-  final Color _bg = const Color(0xFF121225);
-  final Color _card = const Color(0xFF1B1B2F);
-  final Color _purple = const Color(0xFF8E7CFF);
-
-  @override
-  void initState() {
-    super.initState();
-    // Đồng bộ level ban đầu theo enum đang chọn
-    _priorityLevel = switch (_selectedPriority) {
-      TaskPriority.high   => 2,
-      TaskPriority.medium => 5,
-      TaskPriority.low    => 9,
-    };
-  }
+  DateTime _date = DateTime.now();
+  TimeOfDay _time = const TimeOfDay(hour: 15, minute: 45);
+  String _category = 'Mới';
+  TaskPriority _priority = TaskPriority.medium;
 
   @override
   void dispose() {
@@ -47,42 +30,39 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final inset = MediaQuery.of(context).viewInsets.bottom;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final card = cs.surfaceVariant;
+    final accent = cs.primary;
 
     return SafeArea(
       child: AnimatedPadding(
-        duration: const Duration(milliseconds: 200),
-        padding: EdgeInsets.only(bottom: bottomInset),
+        duration: const Duration(milliseconds: 180),
+        padding: EdgeInsets.only(bottom: inset),
         child: Container(
-          height: MediaQuery.of(context).size.height * 0.9,
+          height: MediaQuery.of(context).size.height * .9,
           decoration: BoxDecoration(
-            color: _bg,
+            color: cs.surface,
             borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(24),
-              topRight: Radius.circular(24),
+              topLeft: Radius.circular(24), topRight: Radius.circular(24),
             ),
           ),
           child: Column(
             children: [
               const SizedBox(height: 8),
-              Container(
-                width: 36, height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white24, borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+              Container(width: 40, height: 4,
+                  decoration: BoxDecoration(color: cs.outlineVariant, borderRadius: BorderRadius.circular(2))),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 14, 8, 6),
                 child: Row(
                   children: [
-                    const Text(
-                      'Thêm Công Việc',
-                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
-                    ),
+                    Text('Thêm Công Việc',
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                     const Spacer(),
                     IconButton(
                       onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close, color: Colors.white70),
+                      icon: Icon(Icons.close, color: cs.onSurfaceVariant),
                     ),
                   ],
                 ),
@@ -93,62 +73,95 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                   padding: const EdgeInsets.fromLTRB(20, 6, 20, 12),
                   child: Form(
                     key: _formKey,
-                    child: Column(
-                      children: [
-                        _input(
-                          controller: _titleCtrl,
-                          hint: 'Làm bài tập toán',
-                          fontSize: 16,
-                          autofocus: true,
-                          textInputAction: TextInputAction.done,
-                          onFieldSubmitted: (_) => _save(),
-                          prefix: const Icon(Icons.edit_outlined, color: Colors.white54),
-                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Nhập tiêu đề' : null,
-                        ),
-                        const SizedBox(height: 12),
-                        _input(
-                          controller: _descCtrl,
-                          hint: 'Mô tả',
-                          maxLines: 3,
-                          prefix: const Icon(Icons.notes_rounded, color: Colors.white54),
-                        ),
-                        const SizedBox(height: 18),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      _section(context, 'Chi tiết'),
+                      const SizedBox(height: 8),
+                      _textField(
+                        context,
+                        controller: _titleCtrl,
+                        hint: 'Tiêu đề (ví dụ: Làm bài tập Toán)',
+                        prefix: Icons.edit_outlined,
+                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Nhập tiêu đề' : null,
+                        fill: card,
+                      ),
+                      const SizedBox(height: 10),
+                      _textField(
+                        context,
+                        controller: _descCtrl,
+                        hint: 'Mô tả',
+                        prefix: Icons.notes_rounded,
+                        maxLines: 3,
+                        fill: card,
+                      ),
 
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            _actionCircle(icon: Icons.access_time,            label: 'Thời Gian', onTap: _pickDateTime),
-                            _actionCircle(icon: Icons.flag,                   label: 'Độ Ưu Tiên', onTap: _pickPriority),
-                            _actionCircle(icon: Icons.label,                  label: 'Danh Mục',  onTap: _pickCategory),
-                            _actionCircle(icon: Icons.arrow_forward_rounded,  label: 'Lưu',       onTap: _save),
-                          ],
-                        ),
+                      const SizedBox(height: 18),
+                      _section(context, 'Lịch & thuộc tính'),
+                      const SizedBox(height: 8),
 
-                        const SizedBox(height: 18),
+                      Row(children: [
+                        Expanded(child: _fieldTile(
+                          context,
+                          icon: Icons.event,
+                          label: 'Ngày',
+                          value: _formatDate(_date),
+                          onTap: _pickDate,
+                          fill: card,
+                        )),
+                        const SizedBox(width: 10),
+                        Expanded(child: _fieldTile(
+                          context,
+                          icon: Icons.access_time,
+                          label: 'Giờ',
+                          value: _formatTimeOfDay(_time),
+                          onTap: _pickTime,
+                          fill: card,
+                        )),
+                      ]),
+                      const SizedBox(height: 10),
 
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Wrap(
-                            spacing: 8, runSpacing: 8,
-                            children: [
-                              _infoChip(icon: Icons.event,       text: _formatDate(_selectedDate)),
-                              _infoChip(icon: Icons.access_time, text: _selectedTime.format(context)),
-                              // HIỂN THỊ P# + label theo level
-                              _infoChip(icon: Icons.flag,        text: 'P$_priorityLevel • ${_priorityLabelFromLevel(_priorityLevel)}'),
-                              _infoChip(icon: Icons.label,       text: _selectedCategory),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                      Row(children: [
+                        Expanded(child: _fieldTile(
+                          context,
+                          icon: Icons.flag,
+                          label: 'Ưu tiên',
+                          value: _priorityLabel(_priority),
+                          onTap: _pickPriority,
+                          valueColor: _priorityColor(_priority),
+                          fill: card,
+                        )),
+                        const SizedBox(width: 10),
+                        Expanded(child: _fieldTile(
+                          context,
+                          icon: Icons.label,
+                          label: 'Danh mục',
+                          value: _category,
+                          valueColor: _categoryColor(_category),
+                          onTap: _pickCategory,
+                          fill: card,
+                        )),
+                      ]),
+
+                      const SizedBox(height: 18),
+                      _section(context, 'Tóm tắt'),
+                      const SizedBox(height: 8),
+                      Wrap(spacing: 8, runSpacing: 8, children: [
+                        _infoChip(context, Icons.event, _formatDate(_date), fill: card),
+                        _infoChip(context, Icons.access_time, _formatTimeOfDay(_time), fill: card),
+                        _infoChip(context, Icons.flag, _priorityLabel(_priority),
+                            color: _priorityColor(_priority), fill: card),
+                        _infoChip(context, Icons.label, _category,
+                            color: _categoryColor(_category), fill: card),
+                      ]),
+                      const SizedBox(height: 100),
+                    ]),
                   ),
                 ),
               ),
 
               Container(
                 decoration: BoxDecoration(
-                  color: _bg,
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 12, offset: const Offset(0, -4))],
+                  color: cs.surface,
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(.18), blurRadius: 12, offset: const Offset(0, -4))],
                 ),
                 padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
                 child: SizedBox(
@@ -156,13 +169,11 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                   child: ElevatedButton(
                     onPressed: _save,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _purple,
+                      backgroundColor: accent,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
-                    child: const Text(
-                      'LƯU CÔNG VIỆC',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, letterSpacing: .3),
-                    ),
+                    child: Text('LƯU CÔNG VIỆC',
+                        style: theme.textTheme.titleSmall?.copyWith(color: cs.onPrimary, fontWeight: FontWeight.w700, letterSpacing: .3)),
                   ),
                 ),
               ),
@@ -174,171 +185,186 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
   }
 
   // ---------- UI helpers ----------
-  Widget _input({
-    required TextEditingController controller,
-    required String hint,
-    Widget? prefix,
-    String? Function(String?)? validator,
-    int maxLines = 1,
-    double fontSize = 15,
-    bool autofocus = false,
-    TextInputAction? textInputAction,
-    void Function(String)? onFieldSubmitted,
-  }) {
+  Widget _section(BuildContext context, String title) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Text(title,
+        style: theme.textTheme.titleSmall?.copyWith(
+          color: cs.onSurfaceVariant, fontWeight: FontWeight.w700,
+        ));
+  }
+
+  Widget _textField(
+      BuildContext context, {
+        required TextEditingController controller,
+        required String hint,
+        required Color fill,
+        IconData? prefix,
+        String? Function(String?)? validator,
+        int maxLines = 1,
+      }) {
+    final cs = Theme.of(context).colorScheme;
     return TextFormField(
       controller: controller,
       validator: validator,
       maxLines: maxLines,
-      autofocus: autofocus,
-      textInputAction: textInputAction,
-      onFieldSubmitted: onFieldSubmitted,
-      style: TextStyle(color: Colors.white, fontSize: fontSize),
+      style: TextStyle(color: cs.onSurface),
       decoration: InputDecoration(
-        prefixIcon: prefix,
+        prefixIcon: prefix == null ? null : Icon(prefix, color: cs.onSurfaceVariant),
         hintText: hint,
-        hintStyle: const TextStyle(color: Colors.white54),
+        hintStyle: TextStyle(color: cs.onSurfaceVariant),
         filled: true,
-        fillColor: _card,
+        fillColor: fill,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
       ),
     );
   }
 
-  Widget _actionCircle({required IconData icon, required String label, required VoidCallback onTap}) {
-    return Column(
-      children: [
-        InkWell(
-          onTap: onTap,
-          customBorder: const CircleBorder(),
-          child: Ink(
-            width: 56, height: 56,
-            decoration: BoxDecoration(color: _purple.withOpacity(.15), shape: BoxShape.circle),
-            child: Icon(icon, color: _purple),
-          ),
+  Widget _fieldTile(
+      BuildContext context, {
+        required IconData icon,
+        required String label,
+        required String value,
+        required VoidCallback onTap,
+        required Color fill,
+        Color? valueColor,
+      }) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Ink(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: fill,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: cs.outlineVariant),
         ),
-        const SizedBox(height: 8),
-        Text(label, style: const TextStyle(color: Colors.white60, fontSize: 12)),
-      ],
+        child: Row(children: [
+          Icon(icon, color: cs.onSurfaceVariant),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+              const SizedBox(height: 2),
+              Text(value,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: valueColor ?? cs.onSurface, fontWeight: FontWeight.w600,
+                  )),
+            ]),
+          ),
+          Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
+        ]),
+      ),
     );
   }
 
-  Widget _infoChip({required IconData icon, required String text}) {
+  Widget _infoChip(BuildContext context, IconData icon, String text, {Color? color, required Color fill}) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: _card, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.white12),
+        color: fill, borderRadius: BorderRadius.circular(20), border: Border.all(color: cs.outlineVariant),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 16, color: Colors.white70),
+        Icon(icon, size: 16, color: color ?? cs.onSurfaceVariant),
         const SizedBox(width: 6),
-        Text(text, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        Text(text, style: TextStyle(color: color ?? cs.onSurfaceVariant, fontSize: 12)),
       ]),
     );
   }
 
   // ---------- pickers ----------
-  Future<void> _pickDateTime() async {
-    final pickedDate = await showDatePicker(
+  Future<void> _pickDate() async {
+    final theme = Theme.of(context);
+    final d = await showDatePicker(
       context: context,
-      initialDate: _selectedDate,
+      initialDate: _date,
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
-      builder: (context, child) => Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: const ColorScheme.dark(
-            primary: Colors.purple, surface: Color(0xFF1A1A1A), onSurface: Colors.white,
-          ),
-        ),
-        child: child!,
-      ),
+      builder: (c, child) => Theme(data: theme, child: child!),
     );
-    if (pickedDate == null) return;
-
-    final pickedTime = await showTimePicker(
-      context: context,
-      initialTime: _selectedTime,
-      builder: (context, child) => Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: const ColorScheme.dark(
-            primary: Colors.purple, surface: Color(0xFF1A1A1A), onSurface: Colors.white,
-          ),
-        ),
-        child: child!,
-      ),
-    );
-
-    if (pickedTime != null) {
-      setState(() {
-        _selectedDate = pickedDate;
-        _selectedTime = pickedTime;
-      });
-    }
+    if (d != null) setState(() => _date = d);
   }
 
-  // POPUP chọn P1..P10 có Cancel/Save
-  Future<void> _pickPriority() async {
-    int temp = _priorityLevel;
-
-    await showDialog(
+  Future<void> _pickTime() async {
+    final theme = Theme.of(context);
+    final use24 = settingsController.state.use24hTime;
+    final t = await showTimePicker(
       context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: _card,
-        title: const Text('Độ Ưu Tiên', style: TextStyle(color: Colors.white)),
-        contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-        content: SizedBox(
-          width: 320,
-          child: GridView.builder(
-            shrinkWrap: true,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 5, // 5 cột x 2 hàng = 10 ô
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-              childAspectRatio: 1.2,
-            ),
-            itemCount: 10,
-            itemBuilder: (_, i) {
-              final level = i + 1;
-              final selected = level == temp;
-              return InkWell(
-                onTap: () => setState(() => temp = level),
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: selected ? _purple : Colors.white10,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: selected ? _purple : Colors.white12),
-                  ),
-                  child: Center(
-                    child: Text(
-                      'P$level',
-                      style: TextStyle(
-                        color: selected ? Colors.white : Colors.white70,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
+      initialTime: _time,
+      builder: (c, child) => Theme(
+        data: theme,
+        child: MediaQuery( // ép 24h nếu bật trong cài đặt
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: use24),
+          child: child!,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Hủy'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: _purple),
-            onPressed: () {
-              setState(() => _priorityLevel = temp);
-              Navigator.pop(context);
-            },
-            child: const Text('Lưu'),
-          ),
-        ],
       ),
+    );
+    if (t != null) setState(() => _time = t);
+  }
+
+  Future<void> _pickPriority() async {
+    final result = await showModalBottomSheet<TaskPriority>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        TaskPriority temp = _priority;
+        final theme = Theme.of(context);
+        final cs = theme.colorScheme;
+        return StatefulBuilder(
+          builder: (ctx, setModal) => SafeArea(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              decoration: BoxDecoration(color: cs.surface, borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Text('Chọn độ ưu tiên', style: theme.textTheme.titleMedium),
+                const SizedBox(height: 12),
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  _priorityChoice('Cao', TaskPriority.high, temp, (p) => setModal(() => temp = p), theme),
+                  _priorityChoice('Trung bình', TaskPriority.medium, temp, (p) => setModal(() => temp = p), theme),
+                  _priorityChoice('Thấp', TaskPriority.low, temp, (p) => setModal(() => temp = p), theme),
+                ]),
+                const SizedBox(height: 16),
+                Row(children: [
+                  Text('Đang chọn: ${_priorityLabel(temp)}', style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                  const Spacer(),
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Hủy')),
+                  const SizedBox(width: 8),
+                  ElevatedButton(onPressed: () => Navigator.pop(ctx, temp), child: const Text('Lưu')),
+                ]),
+              ]),
+            ),
+          ),
+        );
+      },
+    );
+    if (result != null && mounted) setState(() => _priority = result);
+  }
+
+  Widget _priorityChoice(
+      String label,
+      TaskPriority value,
+      TaskPriority current,
+      void Function(TaskPriority) onPick,
+      ThemeData theme,
+      ) {
+    final cs = theme.colorScheme;
+    final selected = value == current;
+    final color = _priorityColor(value);
+    return ChoiceChip(
+      label: Text(label),
+      showCheckmark: false,
+      selected: selected,
+      selectedColor: color.withOpacity(.22),
+      backgroundColor: cs.surfaceVariant,
+      side: BorderSide(color: selected ? color : cs.outlineVariant),
+      labelStyle: TextStyle(color: selected ? color : cs.onSurfaceVariant, fontWeight: FontWeight.w700),
+      onSelected: (_) => onPick(value),
     );
   }
 
@@ -346,52 +372,52 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
     final name = await Navigator.push<String>(
       context,
       MaterialPageRoute(
-        builder: (_) => CategoryScreen(
-          selectedCategory: _selectedCategory,
-          onCategorySelected: (_) {},
-        ),
+        builder: (_) => CategoryScreen(selectedCategory: _category, onCategorySelected: (_) {}),
       ),
     );
-    if (name != null && name.isNotEmpty) {
-      setState(() => _selectedCategory = name);
-    }
+    if (name != null && name.isNotEmpty) setState(() => _category = name);
   }
 
   // ---------- save ----------
   void _save() {
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
-
-    // Map level -> enum để lưu vào Task
-    _selectedPriority = _enumFromLevel(_priorityLevel);
-
     final task = Task(
       title: _titleCtrl.text.trim(),
       description: _descCtrl.text.trim(),
       isCompleted: false,
-      category: _selectedCategory,
-      priority: _selectedPriority,
-      date: _selectedDate,
-      time: '${_selectedTime.hour.toString().padLeft(2, '0')}:${_selectedTime.minute.toString().padLeft(2, '0')}',
+      category: _category,
+      priority: _priority,
+      date: _date,
+      time: '${_time.hour.toString().padLeft(2, '0')}:${_time.minute.toString().padLeft(2, '0')}',
     );
     Navigator.pop(context, task);
   }
 
   // ---------- utils ----------
-  String _formatDate(DateTime d) =>
-      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+  String _formatDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
 
-  // Label theo level (1..10)
-  String _priorityLabelFromLevel(int p) {
-    if (p <= 3) return 'Cao';
-    if (p <= 7) return 'Trung bình';
-    return 'Thấp';
+  String _priorityLabel(TaskPriority p) =>
+      switch (p) { TaskPriority.high => 'Cao', TaskPriority.medium => 'Trung bình', TaskPriority.low => 'Thấp' };
+
+  Color _priorityColor(TaskPriority p) =>
+      switch (p) { TaskPriority.high => Colors.red, TaskPriority.medium => Colors.orange, TaskPriority.low => Colors.green };
+
+  Color _categoryColor(String name) {
+    switch (name.toLowerCase()) {
+      case 'đại học': return Colors.blue;
+      case 'công việc': return Colors.orange;
+      case 'cá nhân': return Colors.green;
+      case 'mới': return Theme.of(context).colorScheme.primary;
+      default:
+        final n = name.toLowerCase().codeUnits.fold<int>(0, (a, b) => a + b);
+        final hue = (n * 37) % 360;
+        return HSLColor.fromAHSL(1, hue.toDouble(), .60, .52).toColor();
+    }
   }
 
-  // Map level -> enum
-  TaskPriority _enumFromLevel(int p) {
-    if (p <= 3) return TaskPriority.high;
-    if (p <= 7) return TaskPriority.medium;
-    return TaskPriority.low;
+  String _formatTimeOfDay(TimeOfDay t) {
+    final use24 = settingsController.state.use24hTime;
+    return MaterialLocalizations.of(context).formatTimeOfDay(t, alwaysUse24HourFormat: use24);
   }
 }

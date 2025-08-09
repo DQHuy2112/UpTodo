@@ -1,14 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:uptodo/models/task.dart';
-import 'package:uptodo/ui/category/category_screen.dart';
-import 'package:uptodo/ui/home/widgets/edit_task_dialog.dart';
-import 'package:uptodo/ui/home/add_task_dialog.dart';
 import 'package:uptodo/data/task_dao.dart';
+
+import 'package:uptodo/ui/home/add_task_dialog.dart';
+import 'package:uptodo/ui/home/widgets/edit_task_dialog.dart';
+
+import 'package:uptodo/ui/category/category_screen.dart';
 import 'package:uptodo/ui/settings/settings_screen.dart';
-import 'package:uptodo/data/settings_service.dart'; // settingsController
 import 'package:uptodo/ui/theme/app_theme.dart';
-import 'package:uptodo/ui/calendar/calendar_screen.dart'; // màn Lịch
-import '../../data/settings_controller.dart'; // gradient theo theme
+
+import 'package:uptodo/ui/calendar/calendar_screen.dart';
+import 'package:uptodo/ui/focus/focus_screen.dart';
+import 'package:uptodo/ui/profile/profile_screen.dart';
+
+import 'package:uptodo/data/settings_controller.dart';
+
+import '../../data/settings_service.dart';
 
 enum SortMode { priority, newest }
 enum ViewMode { both, active, completed }
@@ -31,7 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
   SortMode _sortMode = SortMode.newest;
   ViewMode _viewMode = ViewMode.both;
 
-  // ---- KEY cho Calendar
+  // KEY cho Calendar
   final _calendarKey = GlobalKey<CalendarScreenState>();
 
   @override
@@ -44,7 +51,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _applyDefaultsFromSettings() async {
     final s = settingsController.state;
     setState(() {
-      _sortMode = s.defaultSort == DefaultSort.priority ? SortMode.priority : SortMode.newest;
+      _sortMode =
+      s.defaultSort == DefaultSort.priority ? SortMode.priority : SortMode.newest;
       _viewMode = s.showCompleted ? ViewMode.both : ViewMode.active;
     });
   }
@@ -58,6 +66,41 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  // ===== Helpers cho Drawer =====
+  void _goToTab(int index) {
+    Navigator.pop(context); // đóng drawer
+    setState(() => _selectedIndex = index);
+    if (index == 1) _calendarKey.currentState?.reload(); // nếu sang Lịch thì refresh
+  }
+
+  Future<void> _deleteCompleted() async {
+    final cs = Theme.of(context).colorScheme;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: cs.surface,
+        title: Text('Xoá tất cả đã hoàn thành', style: TextStyle(color: cs.onSurface)),
+        content: Text('Bạn chắc chắn muốn xoá mọi công việc đã hoàn thành?',
+            style: TextStyle(color: cs.onSurfaceVariant)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Hủy')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text('Xoá', style: TextStyle(color: cs.error))),
+        ],
+      ),
+    );
+
+    if (ok == true) {
+      final done = _tasks.where((t) => t.isCompleted && t.id != null).toList();
+      for (final t in done) {
+        await _taskDao.delete(t.id!);
+      }
+      setState(() => _tasks.removeWhere((t) => t.isCompleted));
+      _calendarKey.currentState?.reload(); // cập nhật badge Lịch
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -68,15 +111,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
         return Scaffold(
           drawer: _buildDrawer(),
-          // BODY dùng IndexedStack để không push khi đổi tab
           body: IndexedStack(
             index: _selectedIndex,
             children: [
               _homeTab(),
-              CalendarScreen(key: _calendarKey), // <-- gắn key
-              const SizedBox.shrink(),            // slot cho nút +
-              const _PlaceholderTab('Tập Trung'),
-              const _PlaceholderTab('Hồ Sơ'),
+              CalendarScreen(key: _calendarKey),
+              const SizedBox.shrink(), // slot cho nút +
+              const FocusScreen(),
+              const ProfileScreen(),
             ],
           ),
           bottomNavigationBar: _buildBottomNavigationBar(accent),
@@ -145,7 +187,8 @@ class _HomeScreenState extends State<HomeScreen> {
           Container(
             width: 40,
             height: 40,
-            decoration: BoxDecoration(color: accent, borderRadius: BorderRadius.circular(20)),
+            decoration:
+            BoxDecoration(color: accent, borderRadius: BorderRadius.circular(20)),
             child: Icon(Icons.person, color: cs.onPrimary, size: 24),
           ),
         ],
@@ -158,55 +201,116 @@ class _HomeScreenState extends State<HomeScreen> {
     final accent = cs.primary;
     final width = MediaQuery.of(context).size.width * .86;
 
+    bool showCompletedNow = _viewMode != ViewMode.active;
+
     return Drawer(
       width: width,
       backgroundColor: Colors.transparent,
       child: ClipRRect(
-        borderRadius: const BorderRadius.only(topRight: Radius.circular(24), bottomRight: Radius.circular(24)),
+        borderRadius: const BorderRadius.only(
+          topRight: Radius.circular(24),
+          bottomRight: Radius.circular(24),
+        ),
         child: Container(
           decoration: BoxDecoration(
             color: cs.surface,
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(.18), blurRadius: 18, offset: const Offset(2, 4))],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(.18),
+                blurRadius: 18,
+                offset: const Offset(2, 4),
+              ),
+            ],
           ),
           child: SafeArea(
             child: Column(
               children: [
                 _drawerHeader(context, cs, accent),
                 const SizedBox(height: 8),
+
                 _drawerItem(
                   cs: cs,
                   icon: Icons.category_outlined,
                   text: 'Danh mục',
                   onTap: () {
                     Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const CategoryScreen()));
+                    Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const CategoryScreen()));
                   },
                 ),
+
                 _drawerItem(
                   cs: cs,
                   icon: Icons.settings_outlined,
                   text: 'Cài đặt',
                   onTap: () async {
                     Navigator.pop(context);
-                    await Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+                    await Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const SettingsScreen()));
                   },
                 ),
+
                 _drawerItem(
                   cs: cs,
                   icon: Icons.event_note_outlined,
                   text: 'Lịch',
-                  onTap: () {
-                    Navigator.pop(context);
-                    setState(() => _selectedIndex = 1);
-                    _calendarKey.currentState?.reload(); // <-- vào Lịch thì reload
-                  },
+                  onTap: () => _goToTab(1),
                 ),
+
+                _drawerItem(
+                  cs: cs,
+                  icon: Icons.timer_outlined,
+                  text: 'Tập trung',
+                  onTap: () => _goToTab(3),
+                ),
+
+                _drawerItem(
+                  cs: cs,
+                  icon: Icons.person_outline,
+                  text: 'Hồ sơ',
+                  onTap: () => _goToTab(4),
+                ),
+
+                // Công tắc hiện việc đã hoàn thành
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: cs.surfaceVariant,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(Icons.visibility_outlined, color: cs.onSurface),
+                  ),
+                  title: Text('Hiện việc đã hoàn thành',
+                      style:
+                      TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700)),
+                  trailing: Switch(
+                    value: showCompletedNow,
+                    onChanged: (v) {
+                      setState(() {
+                        _viewMode = v ? ViewMode.both : ViewMode.active;
+                      });
+                      Navigator.pop(context);
+                    },
+                  ),
+                ),
+
+                _drawerItem(
+                  cs: cs,
+                  icon: Icons.cleaning_services_outlined,
+                  text: 'Xoá tất cả đã hoàn thành',
+                  onTap: _deleteCompleted,
+                ),
+
                 _drawerItem(
                   cs: cs,
                   icon: Icons.close,
                   text: 'Đóng',
                   onTap: () => Navigator.pop(context),
                 ),
+
                 const Spacer(),
                 const Divider(height: 1),
                 _drawerFooter(cs),
@@ -222,23 +326,37 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [accent.withOpacity(.16), accent.withOpacity(.04)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+        gradient: LinearGradient(
+          colors: [accent.withOpacity(.16), accent.withOpacity(.04)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         border: Border(bottom: BorderSide(color: cs.outlineVariant)),
       ),
       child: Row(
         children: [
-          CircleAvatar(radius: 22, backgroundColor: accent, child: Icon(Icons.checklist_rounded, color: cs.onPrimary)),
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: accent,
+            child: Icon(Icons.checklist_rounded, color: cs.onPrimary),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('UpTodo', style: TextStyle(color: cs.onSurface, fontSize: 20, fontWeight: FontWeight.w900)),
-                Text('Tổ chức công việc', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
+                Text('UpTodo',
+                    style: TextStyle(
+                        color: cs.onSurface, fontSize: 20, fontWeight: FontWeight.w900)),
+                Text('Tổ chức công việc',
+                    style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
               ],
             ),
           ),
-          IconButton(icon: Icon(Icons.close_rounded, color: cs.onSurfaceVariant), onPressed: () => Navigator.of(context).pop()),
+          IconButton(
+            icon: Icon(Icons.close_rounded, color: cs.onSurfaceVariant),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
         ],
       ),
     );
@@ -252,8 +370,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }) {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-      leading: Container(width: 40, height: 40, decoration: BoxDecoration(color: cs.surfaceVariant, borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: cs.onSurface)),
-      title: Text(text, style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700)),
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: cs.surfaceVariant,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, color: cs.onSurface),
+      ),
+      title: Text(text,
+          style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700)),
       trailing: Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
       onTap: onTap,
     );
@@ -321,7 +448,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _dropdownShell(Widget child) {
     final cs = Theme.of(context).colorScheme;
     return DecoratedBox(
-      decoration: BoxDecoration(color: cs.surfaceVariant.withOpacity(.6), borderRadius: BorderRadius.circular(12), border: Border.all(color: cs.outlineVariant)),
+      decoration: BoxDecoration(
+        color: cs.surfaceVariant.withOpacity(.6),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: cs.outlineVariant),
+      ),
       child: Padding(padding: const EdgeInsets.symmetric(horizontal: 10), child: child),
     );
   }
@@ -334,11 +465,26 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(width: 200, decoration: BoxDecoration(color: accent.withOpacity(0.1), borderRadius: BorderRadius.circular(100)), child: Icon(Icons.task_alt, size: 100, color: accent)),
+          Container(
+            width: 200,
+            decoration: BoxDecoration(
+              color: accent.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(100),
+            ),
+            child: Icon(Icons.task_alt, size: 100, color: accent),
+          ),
           const SizedBox(height: 40),
-          Text('Bạn muốn làm gì hôm nay?', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(color: cs.onBackground, fontWeight: FontWeight.bold)),
+          Text('Bạn muốn làm gì hôm nay?',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.headlineSmall?.copyWith(
+                color: cs.onBackground,
+                fontWeight: FontWeight.bold,
+              )),
           const SizedBox(height: 16),
-          Text('Nhấn + để thêm công việc', textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+          Text('Nhấn + để thêm công việc',
+              textAlign: TextAlign.center,
+              style:
+              theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
         ],
       ),
     );
@@ -353,7 +499,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final doneSorted = _sortedCopy(done);
 
     final sortLbl = _sortMode == SortMode.priority ? 'Ưu tiên' : 'Mới nhất';
-    final showDone = _viewMode == ViewMode.completed || (_viewMode == ViewMode.both && showCompletedSetting);
+    final showDone =
+        _viewMode == ViewMode.completed || (_viewMode == ViewMode.both && showCompletedSetting);
 
     List<Widget> children = [];
 
@@ -379,11 +526,17 @@ class _HomeScreenState extends State<HomeScreen> {
     if (children.isEmpty) {
       children = [
         const SizedBox(height: 24),
-        Center(child: Text('Không có công việc', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))),
+        Center(
+          child: Text('Không có công việc',
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        ),
       ];
     }
 
-    return Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: ListView(children: [...children, const SizedBox(height: 80)]));
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: ListView(children: [...children, const SizedBox(height: 80)]),
+    );
   }
 
   Widget _sectionHeader(String title) {
@@ -392,7 +545,9 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
-          Text(title, style: TextStyle(color: cs.onBackground, fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(title,
+              style: TextStyle(
+                  color: cs.onBackground, fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(width: 8),
           Expanded(child: Divider(color: cs.outlineVariant, height: 1)),
         ],
@@ -425,7 +580,12 @@ class _HomeScreenState extends State<HomeScreen> {
             color: bg,
             borderRadius: BorderRadius.circular(12),
             border: Border(left: BorderSide(color: stripe, width: 3)),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(.12), blurRadius: 10, offset: const Offset(0, 4))],
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withOpacity(.12),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4))
+            ],
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -444,10 +604,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   height: 24,
                   decoration: BoxDecoration(
                     color: task.isCompleted ? cs.primary : Colors.transparent,
-                    border: Border.all(color: task.isCompleted ? cs.primary : cs.outline, width: 2),
+                    border:
+                    Border.all(color: task.isCompleted ? cs.primary : cs.outline, width: 2),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: task.isCompleted ? Icon(Icons.check, size: 16, color: cs.onPrimary) : null,
+                  child:
+                  task.isCompleted ? Icon(Icons.check, size: 16, color: cs.onPrimary) : null,
                 ),
               ),
               const SizedBox(width: 12),
@@ -465,7 +627,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: theme.textTheme.titleMedium?.copyWith(
                               color: cs.onSurface,
                               fontWeight: FontWeight.w700,
-                              decoration: task.isCompleted ? TextDecoration.lineThrough : null,
+                              decoration:
+                              task.isCompleted ? TextDecoration.lineThrough : null,
                             ),
                           ),
                         ),
@@ -473,7 +636,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                     const SizedBox(height: 6),
-                    Text((task.description).trim().isEmpty ? 'Không có mô tả' : task.description, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    Text(
+                      (task.description).trim().isEmpty
+                          ? 'Không có mô tả'
+                          : task.description,
+                      style:
+                      theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 10),
                     Row(
                       children: [
@@ -504,11 +675,14 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: cs.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
       builder: (ctx) {
         return SafeArea(
           child: Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(ctx).viewInsets.bottom),
+            padding:
+            EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(ctx).viewInsets.bottom),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -517,15 +691,34 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(t.title, style: Theme.of(ctx).textTheme.titleLarge?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w800)),
+                        child: Text(
+                          t.title,
+                          style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
+                            color: cs.onSurface,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
-                      Icon(t.isCompleted ? Icons.check_circle : Icons.radio_button_unchecked, color: t.isCompleted ? cs.primary : cs.onSurfaceVariant),
+                      Icon(
+                        t.isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
+                        color: t.isCompleted ? cs.primary : cs.onSurfaceVariant,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  if (t.description.trim().isNotEmpty) Text(t.description, style: TextStyle(color: cs.onSurfaceVariant)),
+                  if (t.description.trim().isNotEmpty)
+                    Text(t.description, style: TextStyle(color: cs.onSurfaceVariant)),
                   if (t.description.trim().isNotEmpty) const SizedBox(height: 12),
-                  Wrap(spacing: 8, runSpacing: 8, children: [_categoryChipReadonly(t.category), _dateChip(t.date), _timeChip(t.time, use24h), _priorityPill(t.priority)]),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _categoryChipReadonly(t.category),
+                      _dateChip(t.date),
+                      _timeChip(t.time, use24h),
+                      _priorityPill(t.priority),
+                    ],
+                  ),
                   const SizedBox(height: 16),
                   const Divider(),
                   const SizedBox(height: 8),
@@ -566,7 +759,8 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final parts = time.split(':');
       final tod = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
-      return MaterialLocalizations.of(context).formatTimeOfDay(tod, alwaysUse24HourFormat: use24h);
+      return MaterialLocalizations.of(context)
+          .formatTimeOfDay(tod, alwaysUse24HourFormat: use24h);
     } catch (_) {
       return time;
     }
@@ -578,11 +772,17 @@ class _HomeScreenState extends State<HomeScreen> {
     final text = _formatTime(time, use24h);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: cs.surfaceVariant, borderRadius: BorderRadius.circular(12), border: Border.all(color: cs.outlineVariant)),
+      decoration: BoxDecoration(
+        color: cs.surfaceVariant,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: cs.outlineVariant),
+      ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.access_time, size: 14, color: cs.onSurfaceVariant),
         const SizedBox(width: 4),
-        Text(text, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w500)),
+        Text(text,
+            style: TextStyle(
+                color: cs.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w500)),
       ]),
     );
   }
@@ -610,24 +810,33 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _dateChip(DateTime d) {
     final cs = Theme.of(context).colorScheme;
-    final label = '${_weekdayVN(d.weekday)} ${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+    final label =
+        '${_weekdayVN(d.weekday)} ${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: cs.surfaceVariant, borderRadius: BorderRadius.circular(12), border: Border.all(color: cs.outlineVariant)),
+      decoration: BoxDecoration(
+        color: cs.surfaceVariant,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: cs.outlineVariant),
+      ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.event, size: 14, color: cs.onSurfaceVariant),
         const SizedBox(width: 4),
-        Text(label, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w500)),
+        Text(label,
+            style: TextStyle(
+                color: cs.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w500)),
       ]),
     );
   }
 
   Widget _priorityPill(TaskPriority p) {
     final c = _getPriorityColor(p);
-    final label = switch (p) { TaskPriority.high => 'Cao', TaskPriority.medium => 'TrB', TaskPriority.low => 'Thấp' };
+    final label =
+    switch (p) { TaskPriority.high => 'Cao', TaskPriority.medium => 'TrB', TaskPriority.low => 'Thấp' };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: c.withOpacity(.18), borderRadius: BorderRadius.circular(10)),
+      decoration:
+      BoxDecoration(color: c.withOpacity(.18), borderRadius: BorderRadius.circular(10)),
       child: Text(label, style: TextStyle(color: c, fontSize: 11, fontWeight: FontWeight.w700)),
     );
   }
@@ -636,7 +845,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final color = _getCategoryColor(name);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: color.withOpacity(.20), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(.9))),
+      decoration: BoxDecoration(
+        color: color.withOpacity(.20),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(.9)),
+      ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.label, size: 14, color: color),
         const SizedBox(width: 4),
@@ -652,14 +865,21 @@ class _HomeScreenState extends State<HomeScreen> {
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(color: color.withOpacity(.20), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(.9))),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.label, size: 14, color: color),
-          const SizedBox(width: 4),
-          Text(name, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
-          const SizedBox(width: 4),
-          Icon(Icons.edit, size: 12, color: color),
-        ]),
+        decoration: BoxDecoration(
+          color: color.withOpacity(.20),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(.9)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.label, size: 14, color: color),
+            const SizedBox(width: 4),
+            Text(name, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
+            const SizedBox(width: 4),
+            Icon(Icons.edit, size: 12, color: color),
+          ],
+        ),
       ),
     );
   }
@@ -686,7 +906,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (task != null) {
       final id = await _taskDao.insert(task);
       setState(() => _tasks.insert(0, task.copyWith(id: id)));
-      _calendarKey.currentState?.reload(date: task.date); // <-- update lịch
+      _calendarKey.currentState?.reload(date: task.date); // update lịch
     }
   }
 
@@ -701,7 +921,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final withId = updated.copyWith(id: _tasks[index].id);
       await _taskDao.update(withId);
       setState(() => _tasks[index] = withId);
-      _calendarKey.currentState?.reload(date: withId.date); // <-- update lịch
+      _calendarKey.currentState?.reload(date: withId.date); // update lịch
     }
   }
 
@@ -731,10 +951,13 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (_) => AlertDialog(
         backgroundColor: cs.surface,
         title: Text('Xoá công việc', style: TextStyle(color: cs.onSurface)),
-        content: Text('Bạn có chắc muốn xoá "${_tasks[index].title}"?', style: TextStyle(color: cs.onSurfaceVariant)),
+        content: Text('Bạn có chắc muốn xoá "${_tasks[index].title}"?',
+            style: TextStyle(color: cs.onSurfaceVariant)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Hủy')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: Text('Xoá', style: TextStyle(color: cs.error))),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text('Xoá', style: TextStyle(color: cs.error))),
         ],
       ),
     );
@@ -780,7 +1003,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ===== Sort helpers =====
-  int _priorityRank(TaskPriority p) => p == TaskPriority.high ? 0 : (p == TaskPriority.medium ? 1 : 2);
+  int _priorityRank(TaskPriority p) =>
+      p == TaskPriority.high ? 0 : (p == TaskPriority.medium ? 1 : 2);
 
   DateTime _comparableDate(Task t) {
     try {
@@ -852,7 +1076,16 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildBottomNavigationBar(Color accent) {
     final cs = Theme.of(context).colorScheme;
     return Container(
-      decoration: BoxDecoration(color: cs.surface, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, -2))]),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
       child: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (i) {
@@ -876,16 +1109,5 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
-  }
-}
-
-// Tab placeholder
-class _PlaceholderTab extends StatelessWidget {
-  final String label;
-  const _PlaceholderTab(this.label);
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Scaffold(backgroundColor: cs.surface, body: Center(child: Text(label, style: TextStyle(color: cs.onSurface))));
   }
 }

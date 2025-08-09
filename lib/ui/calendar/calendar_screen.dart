@@ -99,10 +99,14 @@ class CalendarScreenState extends State<CalendarScreen> {
     final showing = _showCompleted ? done : active;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F1012),
+      // dùng theme thay vì màu cứng
+      backgroundColor: cs.surface,
       appBar: AppBar(
-        title: const Text('Lịch'),
-        backgroundColor: Colors.transparent,
+        backgroundColor: cs.surface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: Text('Lịch', style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w800)),
+        iconTheme: IconThemeData(color: cs.onSurface),
         actions: [
           // chọn sắp xếp
           PopupMenuButton<CalSort>(
@@ -151,6 +155,8 @@ class CalendarScreenState extends State<CalendarScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        backgroundColor: cs.primary,
+        foregroundColor: cs.onPrimary,
         onPressed: () async {
           final t = await showModalBottomSheet<Task>(
             context: context,
@@ -178,7 +184,7 @@ class CalendarScreenState extends State<CalendarScreen> {
         children: [
           IconButton(
             icon: const Icon(Icons.chevron_left),
-            // ➜ LÙI 1 TUẦN thay vì lùi 1 tháng
+            // ➜ LÙI 1 TUẦN
             onPressed: () {
               setState(() => _selected = _onlyDay(_selected.subtract(const Duration(days: 7))));
               _load();
@@ -193,6 +199,10 @@ class CalendarScreenState extends State<CalendarScreen> {
                 firstDate: DateTime(2015),
                 lastDate: DateTime(2100),
                 helpText: 'Chọn ngày',
+                builder: (ctx, child) {
+                  // đảm bảo date picker cũng ăn theme
+                  return Theme(data: Theme.of(ctx), child: child!);
+                },
               );
               if (picked != null) {
                 setState(() => _selected = _onlyDay(picked));
@@ -204,10 +214,11 @@ class CalendarScreenState extends State<CalendarScreen> {
               decoration: BoxDecoration(
                 color: cs.surfaceVariant.withOpacity(.2),
                 borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: cs.outlineVariant),
               ),
               child: Row(
                 children: [
-                  Text(text, style: TextStyle(color: cs.onSurface)),
+                  Text(text, style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600)),
                   const SizedBox(width: 6),
                   Icon(Icons.calendar_month, size: 18, color: cs.onSurfaceVariant),
                 ],
@@ -216,7 +227,7 @@ class CalendarScreenState extends State<CalendarScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.chevron_right),
-            // ➜ TIẾN 1 TUẦN thay vì tiến 1 tháng
+            // ➜ TIẾN 1 TUẦN
             onPressed: () {
               setState(() => _selected = _onlyDay(_selected.add(const Duration(days: 7))));
               _load();

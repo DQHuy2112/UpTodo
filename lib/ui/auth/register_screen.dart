@@ -1,17 +1,9 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:uptodo/ui/auth/register_screen.dart';
+import 'package:path/path.dart';
 
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
-
-  @override
-  State<LoginPage> createState() => _LoginPageState();
-}
-
-class _LoginPageState extends State<LoginPage> {
-  final _formkey = GlobalKey<FormState>();
-  var _autoValidateMode = AutovalidateMode.disabled;
+class RegisterPage extends StatelessWidget {
+  const RegisterPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -39,10 +31,10 @@ class _LoginPageState extends State<LoginPage> {
             children: [
               _buildPageTitle(),
               const SizedBox(height: 52),
-              _buildFormLogin(),
+              _buildFormRegister(),
               _buildOrSplitDivider(),
-              _buildSocialLogin(),
-              _buildHaveNotAccount(context),
+              _buildSocialRegister(),
+              _buildHaveAccount(context),
 
             ],
           ),
@@ -55,7 +47,7 @@ class _LoginPageState extends State<LoginPage> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20).copyWith(top: 40),
       child: Text(
-        "Login",
+        "Register",
         style: TextStyle(
           color: Colors.white.withOpacity(0.87),
           fontFamily: "Lato",
@@ -67,10 +59,8 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Widget _buildFormLogin() {
+  Widget _buildFormRegister() {
     return Form(
-      autovalidateMode: _autoValidateMode,
-      key: _formkey,
       child: Container(
         margin: EdgeInsets.symmetric(horizontal: 24),
         child: Column(
@@ -80,6 +70,8 @@ class _LoginPageState extends State<LoginPage> {
             _buildUsernameField(),
             const SizedBox(height: 25),
             _buildPasswordField(),
+            const SizedBox(height: 25),
+            _buildConfirmPasswordField(),
             _buildLoginButton(),
           ],
         ),
@@ -116,18 +108,6 @@ class _LoginPageState extends State<LoginPage> {
               fillColor: const Color(0xFF1D1D1D),
               filled: true,
             ),
-            validator: (String? value){
-              if(value == null || value.isEmpty){
-                return "Username is required";
-              }
-              final bool emailValid =
-              RegExp(r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+")
-                  .hasMatch(value);
-              if(!emailValid) {
-                return "Username khong hop le!";
-              }
-              return null;
-            },
             style: const TextStyle(
               color: Colors.white,
               fontFamily: "Lato",
@@ -156,7 +136,7 @@ class _LoginPageState extends State<LoginPage> {
           margin: const EdgeInsets.only(top: 8),
           child: TextFormField(
             decoration: InputDecoration(
-              hintText: "* * * * * * *",
+              hintText: "*******",
               hintStyle: const TextStyle(
                 color: Color(0xFF535353),
                 fontFamily: "Lato",
@@ -168,15 +148,6 @@ class _LoginPageState extends State<LoginPage> {
               fillColor: const Color(0xFF1D1D1D),
               filled: true,
             ),
-            validator: (String? value){
-              if(value == null || value.isEmpty){
-                return "Password Khong duoc de trong.";
-              }
-              if(value.length < 6) {
-                return "Password phai tu 6 ki tu tro len.";
-              }
-              return null;
-            },
             style: const TextStyle(
               color: Colors.white,
               fontFamily: "Lato",
@@ -187,8 +158,50 @@ class _LoginPageState extends State<LoginPage> {
         ),
       ],
     );
-
   }
+
+  Widget _buildConfirmPasswordField() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "Comfirm Password",
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.87),
+            fontFamily: "Lato",
+            fontSize: 16,
+          ),
+        ),
+        Container(
+          margin: const EdgeInsets.only(top: 8),
+          child: TextFormField(
+            decoration: InputDecoration(
+              hintText: "*******",
+              hintStyle: const TextStyle(
+                color: Color(0xFF535353),
+                fontFamily: "Lato",
+                fontSize: 16,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+              ),
+              fillColor: const Color(0xFF1D1D1D),
+              filled: true,
+            ),
+            style: const TextStyle(
+              color: Colors.white,
+              fontFamily: "Lato",
+              fontSize: 16,
+            ),
+            obscureText: true,
+          ),
+        ),
+      ],
+    );
+  }
+
+
 
   Widget _buildLoginButton() {
     return Container(
@@ -196,7 +209,7 @@ class _LoginPageState extends State<LoginPage> {
       height: 48,
       margin: const EdgeInsets.only(top: 70),
       child: ElevatedButton(
-        onPressed: _onHandleLoginSubmit,
+        onPressed: () {},
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF8875FF),
           shape: RoundedRectangleBorder(
@@ -205,7 +218,7 @@ class _LoginPageState extends State<LoginPage> {
           disabledBackgroundColor: const Color(0xFF8687E7).withOpacity(0.5),
         ),
         child: const Text(
-          "Login",
+          "Register",
           style: TextStyle(
             fontSize: 16,
             fontFamily: "Lato",
@@ -243,7 +256,7 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Widget _buildSocialLogin() {
+  Widget _buildSocialRegister() {
     return Column(
       children: [
         _buildSocialGoogleLogin(),
@@ -280,7 +293,7 @@ class _LoginPageState extends State<LoginPage> {
             Container(
               margin: EdgeInsets.only(left: 10),
               child: const Text(
-                "Login with Google",
+                "Register with Google",
                 style: TextStyle(
                   fontSize: 16,
                   fontFamily: "Lato",
@@ -321,7 +334,7 @@ class _LoginPageState extends State<LoginPage> {
             Container(
               margin: EdgeInsets.only(left: 10),
               child: const Text(
-                "Login with Apple",
+                "Register with Apple",
                 style: TextStyle(
                   fontSize: 16,
                   fontFamily: "Lato",
@@ -335,14 +348,13 @@ class _LoginPageState extends State<LoginPage> {
     );
 
   }
-
-  Widget _buildHaveNotAccount(BuildContext context) {
+  Widget _buildHaveAccount(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(top: 46, bottom: 20),
       alignment: Alignment.center,
       child: RichText(
         text: TextSpan(
-          text: "Don’t have an account? ",
+          text: "Already have an account? ",
           style: const TextStyle(
             fontSize: 12,
             fontFamily: "Lato",
@@ -350,7 +362,7 @@ class _LoginPageState extends State<LoginPage> {
           ),
           children: [
             TextSpan(
-              text: "Register",
+              text: "Login",
               style: TextStyle(
                 fontSize: 12,
                 fontFamily: "Lato",
@@ -358,7 +370,7 @@ class _LoginPageState extends State<LoginPage> {
               ),
               recognizer: TapGestureRecognizer()
                 ..onTap = () {
-                  _gotoRegisterPage(context);
+                  Navigator.pop(context);
                 },
             ),
           ],
@@ -366,30 +378,4 @@ class _LoginPageState extends State<LoginPage> {
       ),
     );
   }
-
-  void _onHandleLoginSubmit(){
-    if(_autoValidateMode == AutovalidateMode.disabled) {
-      setState(() {
-        _autoValidateMode = AutovalidateMode.always;
-      });
-    }
-
-
-    final isValid = _formkey.currentState?.validate() ?? false;
-    if(isValid){
-      /// Cal API login, Call Firebase Login
-    }else {
-
-    }
-  }
-
-  void _gotoRegisterPage(BuildContext context){
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const RegisterPage(),
-      ),
-    );
-  }
-
 }

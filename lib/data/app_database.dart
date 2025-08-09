@@ -10,11 +10,14 @@ class AppDatabase {
     if (_db != null) return _db!;
     final dir = await getDatabasesPath();
     final path = join(dir, 'uptodo.db');
+
     _db = await openDatabase(
       path,
-      version: 2, // ⬅ nâng version để tạo bảng tasks
+      version: 5, // tăng version để force recreate và fix lỗi
       onCreate: (db, version) async {
-        // categories (đã có sẵn)
+        print('Creating database version $version');
+
+        // categories
         await db.execute('''
           CREATE TABLE categories(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,31 +28,103 @@ class AppDatabase {
           )
         ''');
 
-        // tasks (mới)
-        await _createTasks(db);
+        // tasks
+        await db.execute('''
+          CREATE TABLE tasks(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            description TEXT,
+            is_completed INTEGER NOT NULL DEFAULT 0,
+            category TEXT,
+            priority INTEGER NOT NULL,
+            due_date INTEGER,
+            time TEXT,
+            created_at INTEGER NOT NULL
+          )
+        ''');
+
+        await db.execute('CREATE INDEX idx_tasks_due ON tasks(due_date)');
+        await db.execute(
+          'CREATE INDEX idx_tasks_completed ON tasks(is_completed)',
+        );
+
+        // profile
+        await db.execute('''
+          CREATE TABLE profile(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            email TEXT NOT NULL,
+            bio TEXT,
+            avatar_path TEXT
+          )
+        ''');
+
+        print('All tables created successfully');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 2) {
-          await _createTasks(db);
+        print('Upgrading database from $oldVersion to $newVersion');
+
+        // Đơn giản hóa: recreate profile table nếu cần
+        if (oldVersion < 5) {
+          try {
+            await db.execute('DROP TABLE IF EXISTS profile');
+            await db.execute('''
+              CREATE TABLE profile(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL,
+                bio TEXT,
+                avatar_path TEXT
+              )
+            ''');
+            print('Profile table recreated');
+          } catch (e) {
+            print('Error recreating profile table: $e');
+          }
         }
+
+        // Đảm bảo tasks table tồn tại
+        try {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS tasks(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              title TEXT NOT NULL,
+              description TEXT,
+              is_completed INTEGER NOT NULL DEFAULT 0,
+              category TEXT,
+              priority INTEGER NOT NULL,
+              due_date INTEGER,
+              time TEXT,
+              created_at INTEGER NOT NULL
+            )
+          ''');
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_date)',
+          );
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_tasks_completed ON tasks(is_completed)',
+          );
+        } catch (e) {
+          print('Error ensuring tasks table: $e');
+        }
+      },
+      onOpen: (db) async {
+        print('Database opened');
       },
     );
     return _db!;
   }
 
-  static Future<void> _createTasks(Database db) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS tasks(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        description TEXT,
-        is_completed INTEGER NOT NULL DEFAULT 0,
-        category TEXT,
-        priority INTEGER NOT NULL,      -- 0:high,1:medium,2:low
-        due_date INTEGER,               -- millisSinceEpoch
-        time TEXT,
-        created_at INTEGER NOT NULL
-      )
-    ''');
+  // Reset database method cho debugging
+  static Future<void> resetDatabase() async {
+    try {
+      final dir = await getDatabasesPath();
+      final path = join(dir, 'uptodo.db');
+      await deleteDatabase(path);
+      _db = null;
+      print('Database reset successfully');
+    } catch (e) {
+      print('Error resetting database: $e');
+    }
   }
 }
